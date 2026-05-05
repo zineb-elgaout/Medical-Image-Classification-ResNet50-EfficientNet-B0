@@ -1,0 +1,12 @@
+{
+  "OCT": {
+    "CNV": 0,
+    "DME": 1,
+    "DRUSEN": 2,
+    "NORMAL": 3
+  },
+  "XRAY": {
+    "NORMAL": 0,
+    "PNEUMONIA": 1
+  }
+}
