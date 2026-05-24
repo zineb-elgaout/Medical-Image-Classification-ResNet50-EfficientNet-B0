@@ -1,0 +1,10 @@
+{
+  "model": "EfficientNetB0",
+  "dataset": "X-Ray",
+  "accuracy": 0.9570815450643777,
+  "auc_roc": 0.9923029327130951,
+  "classes": [
+    "NORMAL",
+    "PNEUMONIA"
+  ]
+}
