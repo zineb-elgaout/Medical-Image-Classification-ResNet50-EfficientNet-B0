@@ -1,0 +1,10 @@
+{
+  "model": "ResNet50",
+  "dataset": "X-Ray",
+  "accuracy": 0.9630901287553648,
+  "auc_roc": 0.9905957865545467,
+  "classes": [
+    "NORMAL",
+    "PNEUMONIA"
+  ]
+}
