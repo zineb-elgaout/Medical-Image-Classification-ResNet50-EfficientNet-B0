@@ -1,4 +1,4 @@
-# 📊 Data Project
+# 📊 A Comparative Study of ResNet50 and EfficientNet-B0 for Medical Image Classification of OCT and X-ray Images Using Transfer Learning Techniques
 
 <div align="center">
 
@@ -259,13 +259,6 @@ For issues or questions:
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
----
-
-## 👤 Author
-
-**Zineb Elgaout**
-- GitHub: [@zineb-elgaout](https://github.com/zineb-elgaout)
-- Repository: [data_project](https://github.com/zineb-elgaout/data_project)
 
 ---
 
@@ -297,6 +290,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 **⭐ If you find this project helpful, please consider giving it a star!**
 
-Made with ❤️ by Zineb Elgaout
+Made with ❤️ 
 
 </div>
