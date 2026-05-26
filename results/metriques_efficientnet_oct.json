@@ -1,0 +1,12 @@
+{
+  "model": "EfficientNetB0",
+  "dataset": "OCT",
+  "accuracy": 0.9370324595069277,
+  "auc_roc": 0.9889510189066475,
+  "classes": [
+    "CNV",
+    "DME",
+    "DRUSEN",
+    "NORMAL"
+  ]
+}
