@@ -27,17 +27,9 @@ MODEL_REGISTRY = {
             "architecture": "efficientnet_b0",
             "path": MODELS_DIR / "efficientnet_xray_best.pth",
         },
-        "EfficientNet-B0 - phase 1": {
-            "architecture": "efficientnet_b0",
-            "path": MODELS_DIR / "efficientnet_xray_phase1.pth",
-        },
         "ResNet50 - best": {
             "architecture": "resnet50",
             "path": MODELS_DIR / "resnet50_xray_best.pth",
-        },
-        "ResNet50 - phase 1": {
-            "architecture": "resnet50",
-            "path": MODELS_DIR / "resnet50_xray_phase1.pth",
         },
     },
     "OCT": {
@@ -45,17 +37,9 @@ MODEL_REGISTRY = {
             "architecture": "efficientnet_b0",
             "path": MODELS_DIR / "efficientnet_OCT_best.pth",
         },
-        "EfficientNet-B0 - phase 1": {
-            "architecture": "efficientnet_b0",
-            "path": MODELS_DIR / "efficientnet_oct_phase1.pth",
-        },
         "ResNet50 - best": {
             "architecture": "resnet50",
             "path": MODELS_DIR / "resnet50_oct_best.pth",
-        },
-        "ResNet50 - phase 1": {
-            "architecture": "resnet50",
-            "path": MODELS_DIR / "resnet50_oct_phase1.pth",
         },
     },
 }
