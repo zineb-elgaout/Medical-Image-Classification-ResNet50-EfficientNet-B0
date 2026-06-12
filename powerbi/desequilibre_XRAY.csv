@@ -1,0 +1,4 @@
+﻿dataset,split,nb_classes,total_images,classe_majoritaire,nb_majoritaire,classe_minoritaire,nb_minoritaire,ratio_desequilibre,est_equilibre
+XRAY,test,2,1165,PNEUMONIA,849,NORMAL,316,2.687,Non
+XRAY,train,2,8658,NORMAL,4329,NORMAL,4329,1.0,Oui
+XRAY,val,2,699,PNEUMONIA,510,NORMAL,189,2.698,Non

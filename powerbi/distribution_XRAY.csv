@@ -1,0 +1,7 @@
+﻿dataset,split,classe,nb_images,total_split,pourcentage
+XRAY,train,NORMAL,4329,8658,50.0
+XRAY,train,PNEUMONIA,4329,8658,50.0
+XRAY,val,NORMAL,189,699,27.04
+XRAY,val,PNEUMONIA,510,699,72.96
+XRAY,test,NORMAL,316,1165,27.12
+XRAY,test,PNEUMONIA,849,1165,72.88
