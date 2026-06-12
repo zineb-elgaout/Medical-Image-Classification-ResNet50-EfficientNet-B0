@@ -1,16 +1,64 @@
-﻿from pathlib import Path
+from pathlib import Path
+import json
 
 import altair as alt
 import pandas as pd
 import streamlit as st
+import torch
+from PIL import Image
+from torch import nn
+from torchvision import models, transforms
 
 
 ROOT = Path(__file__).resolve().parent
 POWERBI_DIR = ROOT / "powerbi"
 DATA_DIR = ROOT / "data"
+MODELS_DIR = ROOT / "models"
+RESULTS_DIR = ROOT / "results"
 
 DATASET_OPTIONS = ["Tous", "OCT", "XRAY"]
 SPLIT_ORDER = ["train", "val", "test"]
+IMG_SIZE = (224, 224)
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+MODEL_REGISTRY = {
+    "XRAY": {
+        "EfficientNet-B0 - best": {
+            "architecture": "efficientnet_b0",
+            "path": MODELS_DIR / "efficientnet_xray_best.pth",
+        },
+        "EfficientNet-B0 - phase 1": {
+            "architecture": "efficientnet_b0",
+            "path": MODELS_DIR / "efficientnet_xray_phase1.pth",
+        },
+        "ResNet50 - best": {
+            "architecture": "resnet50",
+            "path": MODELS_DIR / "resnet50_xray_best.pth",
+        },
+        "ResNet50 - phase 1": {
+            "architecture": "resnet50",
+            "path": MODELS_DIR / "resnet50_xray_phase1.pth",
+        },
+    },
+    "OCT": {
+        "EfficientNet-B0 - best": {
+            "architecture": "efficientnet_b0",
+            "path": MODELS_DIR / "efficientnet_OCT_best.pth",
+        },
+        "EfficientNet-B0 - phase 1": {
+            "architecture": "efficientnet_b0",
+            "path": MODELS_DIR / "efficientnet_oct_phase1.pth",
+        },
+        "ResNet50 - best": {
+            "architecture": "resnet50",
+            "path": MODELS_DIR / "resnet50_oct_best.pth",
+        },
+        "ResNet50 - phase 1": {
+            "architecture": "resnet50",
+            "path": MODELS_DIR / "resnet50_oct_phase1.pth",
+        },
+    },
+}
 
 
 st.set_page_config(
@@ -103,13 +151,100 @@ def load_csv(name: str) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
+def build_distribution(metadata: pd.DataFrame) -> pd.DataFrame:
+    if metadata.empty:
+        return pd.DataFrame()
+
+    distribution = (
+        metadata.groupby(["dataset", "split", "classe"], as_index=False)
+        .size()
+        .rename(columns={"size": "nb_images"})
+    )
+    distribution["total_split"] = distribution.groupby(["dataset", "split"])["nb_images"].transform("sum")
+    distribution["pourcentage"] = (distribution["nb_images"] / distribution["total_split"] * 100).round(2)
+    return distribution
+
+
+def build_imbalance(distribution: pd.DataFrame) -> pd.DataFrame:
+    if distribution.empty:
+        return pd.DataFrame()
+
+    rows = []
+    for (dataset, split), group in distribution.groupby(["dataset", "split"]):
+        ordered = group.sort_values("nb_images", ascending=False)
+        majority = ordered.iloc[0]
+        minority = ordered.iloc[-1]
+        ratio = majority["nb_images"] / minority["nb_images"] if minority["nb_images"] else 0
+        rows.append(
+            {
+                "dataset": dataset,
+                "split": split,
+                "nb_classes": group["classe"].nunique(),
+                "total_images": group["nb_images"].sum(),
+                "classe_majoritaire": majority["classe"],
+                "nb_majoritaire": int(majority["nb_images"]),
+                "classe_minoritaire": minority["classe"],
+                "nb_minoritaire": int(minority["nb_images"]),
+                "ratio_desequilibre": round(ratio, 3),
+                "est_equilibre": "Oui" if ratio <= 1.2 else "Non",
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def build_stats(metadata: pd.DataFrame) -> pd.DataFrame:
+    if metadata.empty:
+        return pd.DataFrame()
+
+    numeric_columns = [
+        "largeur_px",
+        "hauteur_px",
+        "pixels_total",
+        "ratio_wh",
+        "lum_moyenne",
+        "lum_std",
+        "contraste",
+        "pixel_min",
+        "pixel_max",
+        "r_mean",
+        "g_mean",
+        "b_mean",
+    ]
+    numeric_columns = [column for column in numeric_columns if column in metadata.columns]
+    aggregations = {
+        "nb_images": ("fichier", "count"),
+        "nb_originales": ("is_augmented", lambda values: int((values == 0).sum())),
+        "nb_augmentees": ("is_augmented", lambda values: int((values == 1).sum())),
+    }
+    for column in numeric_columns:
+        aggregations[f"{column}_mean"] = (column, "mean")
+        aggregations[f"{column}_min"] = (column, "min")
+        aggregations[f"{column}_max"] = (column, "max")
+
+    stats = metadata.groupby(["dataset", "split", "classe"]).agg(**aggregations).reset_index()
+    return stats.round(2)
+
+
 @st.cache_data(show_spinner=False)
 def load_powerbi_exports() -> dict[str, pd.DataFrame]:
+    metadata = load_csv("metadata_images_all.csv")
+    distribution = load_csv("distribution_all.csv")
+    if distribution.empty:
+        distribution = build_distribution(metadata)
+
+    imbalance = load_csv("desequilibre_all.csv")
+    if imbalance.empty:
+        imbalance = build_imbalance(distribution)
+
+    stats = load_csv("stats_agregees_all.csv")
+    if stats.empty:
+        stats = build_stats(metadata)
+
     return {
-        "metadata": load_csv("metadata_images_all.csv"),
-        "distribution": load_csv("distribution_all.csv"),
-        "imbalance": load_csv("desequilibre_all.csv"),
-        "stats": load_csv("stats_agregees_all.csv"),
+        "metadata": metadata,
+        "distribution": distribution,
+        "imbalance": imbalance,
+        "stats": stats,
     }
 
 
@@ -147,6 +282,93 @@ def filter_dataframe(
 def dataset_image_path(row: pd.Series) -> Path:
     folder = "OCT_aug" if row["dataset"] == "OCT" else "xray_aug"
     return DATA_DIR / folder / str(row["split"]) / str(row["classe"]) / str(row["fichier"])
+
+
+@st.cache_data(show_spinner=False)
+def load_class_mappings() -> dict[str, dict[str, int]]:
+    mapping_path = RESULTS_DIR / "class_mappings.json"
+    if mapping_path.exists():
+        with mapping_path.open("r", encoding="utf-8") as file:
+            return json.load(file)
+
+    mappings = {}
+    oct_path = RESULTS_DIR / "oct_class_mapping.json"
+    xray_path = RESULTS_DIR / "xray_class_mapping.json"
+    if oct_path.exists():
+        with oct_path.open("r", encoding="utf-8") as file:
+            mappings["OCT"] = json.load(file)
+    if xray_path.exists():
+        with xray_path.open("r", encoding="utf-8") as file:
+            mappings["XRAY"] = json.load(file)
+    return mappings
+
+
+def build_model(architecture: str, num_classes: int) -> nn.Module:
+    if architecture == "resnet50":
+        model = models.resnet50(weights=None)
+        in_features = model.fc.in_features
+        model.fc = nn.Sequential(
+            nn.Linear(in_features, 512),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(512, num_classes),
+        )
+        return model
+
+    if architecture == "efficientnet_b0":
+        model = models.efficientnet_b0(weights=None)
+        in_features = model.classifier[1].in_features
+        model.classifier = nn.Sequential(
+            nn.Dropout(p=0.3),
+            nn.Linear(in_features, 512),
+            nn.ReLU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(512, num_classes),
+        )
+        return model
+
+    raise ValueError(f"Architecture inconnue: {architecture}")
+
+
+@st.cache_resource(show_spinner=False)
+def load_prediction_model(architecture: str, checkpoint_path: str, num_classes: int) -> nn.Module:
+    path = Path(checkpoint_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Checkpoint introuvable: {path}")
+
+    model = build_model(architecture, num_classes)
+    state_dict = torch.load(path, map_location=DEVICE)
+    model.load_state_dict(state_dict)
+    model.to(DEVICE)
+    model.eval()
+    return model
+
+
+def preprocess_uploaded_image(image: Image.Image) -> torch.Tensor:
+    pipeline = transforms.Compose(
+        [
+            transforms.Resize(IMG_SIZE),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225],
+            ),
+        ]
+    )
+    return pipeline(image.convert("RGB")).unsqueeze(0).to(DEVICE)
+
+
+def predict_uploaded_image(model: nn.Module, image: Image.Image, classes: list[str]) -> pd.DataFrame:
+    tensor = preprocess_uploaded_image(image)
+    with torch.inference_mode():
+        logits = model(tensor)
+        probabilities = torch.softmax(logits, dim=1).squeeze(0).cpu().numpy()
+
+    return (
+        pd.DataFrame({"Classe": classes, "Probabilite": probabilities})
+        .sort_values("Probabilite", ascending=False)
+        .reset_index(drop=True)
+    )
 
 
 def chart_distribution(distribution: pd.DataFrame) -> alt.Chart:
@@ -281,8 +503,8 @@ kpi2.metric("Classes", format_number(nb_classes), ", ".join(sorted(metadata["spl
 kpi3.metric("Images augmentees", percent(augmented_rate))
 kpi4.metric("Luminosite moyenne", f"{avg_lum:.1f}", f"Ratio max {worst_ratio:.2f}" if pd.notna(worst_ratio) else None)
 
-tab_overview, tab_quality, tab_stats, tab_gallery = st.tabs(
-    ["Vue globale", "Qualite image", "Stats detaillees", "Galerie"]
+tab_overview, tab_quality, tab_prediction, tab_stats, tab_gallery = st.tabs(
+    ["Vue globale", "Qualite image", "Prediction", "Stats detaillees", "Galerie"]
 )
 
 with tab_overview:
@@ -327,6 +549,87 @@ with tab_quality:
         .round(2)
     )
     st.dataframe(quality_summary, hide_index=True, use_container_width=True)
+
+
+with tab_prediction:
+    st.subheader("Prediction sur une image")
+    st.markdown(
+        "<div class='section-note'>Charge une image OCT ou X-Ray, choisis un checkpoint sauvegarde, puis lance une prediction de classe.</div>",
+        unsafe_allow_html=True,
+    )
+
+    mappings = load_class_mappings()
+    pred_left, pred_right = st.columns([0.95, 1.05], gap="large")
+
+    with pred_left:
+        prediction_dataset = st.radio(
+            "Type d'image a predire",
+            ["XRAY", "OCT"],
+            horizontal=True,
+            key="prediction_dataset",
+        )
+        prediction_model_name = st.selectbox(
+            "Modele de prediction",
+            list(MODEL_REGISTRY[prediction_dataset]),
+            key="prediction_model",
+        )
+        uploaded_image = st.file_uploader(
+            "Uploader une image",
+            type=["png", "jpg", "jpeg", "webp"],
+            key="prediction_upload",
+        )
+
+        model_info = MODEL_REGISTRY[prediction_dataset][prediction_model_name]
+        st.caption(f"Checkpoint: `{model_info['path'].relative_to(ROOT)}`")
+        st.caption(f"Execution: `{DEVICE}`")
+
+        image = None
+        if uploaded_image is not None:
+            image = Image.open(uploaded_image)
+            st.image(image, caption=uploaded_image.name, use_container_width=True)
+        else:
+            st.info("Ajoute une image pour afficher la prediction.")
+
+    with pred_right:
+        st.write("Resultat")
+        class_mapping = mappings.get(prediction_dataset, {})
+        classes = [name for name, _ in sorted(class_mapping.items(), key=lambda item: item[1])]
+
+        if not classes:
+            st.error("Mapping des classes introuvable dans le dossier results.")
+        elif image is None:
+            st.write("La classe predite et les probabilites apparaitront ici.")
+        else:
+            try:
+                with st.spinner("Chargement du modele et calcul de la prediction..."):
+                    model = load_prediction_model(
+                        model_info["architecture"],
+                        str(model_info["path"]),
+                        len(classes),
+                    )
+                    prediction = predict_uploaded_image(model, image, classes)
+
+                top_class = prediction.loc[0, "Classe"]
+                top_probability = prediction.loc[0, "Probabilite"]
+
+                metric_col, detail_col = st.columns([0.9, 1.1])
+                metric_col.metric("Classe predite", top_class, f"{top_probability:.2%}")
+                detail_col.info(
+                    "Prediction de projet uniquement. Une decision medicale demande une validation par un professionnel qualifie."
+                )
+
+                chart_data = prediction.set_index("Classe")
+                st.bar_chart(chart_data["Probabilite"])
+
+                display_prediction = prediction.copy()
+                display_prediction["Probabilite"] = display_prediction["Probabilite"].map(
+                    lambda value: f"{value:.2%}"
+                )
+                st.dataframe(display_prediction, hide_index=True, use_container_width=True)
+            except Exception as exc:
+                st.error("Impossible de predire avec ce checkpoint.")
+                st.exception(exc)
+
 
 with tab_stats:
     st.subheader("Statistiques agregees exportees")
