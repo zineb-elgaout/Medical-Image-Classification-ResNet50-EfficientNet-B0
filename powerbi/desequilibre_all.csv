@@ -1,0 +1,7 @@
+﻿dataset,split,nb_classes,total_images,classe_majoritaire,nb_majoritaire,classe_minoritaire,nb_minoritaire,ratio_desequilibre,est_equilibre
+OCT,test,4,15373,CNV,6330,DRUSEN,1568,4.037,Non
+OCT,train,4,128393,CNV,32280,NORMAL,31553,1.023,Oui
+OCT,val,4,9229,CNV,3798,DRUSEN,941,4.036,Non
+XRAY,test,2,1165,PNEUMONIA,849,NORMAL,316,2.687,Non
+XRAY,train,2,8658,NORMAL,4329,NORMAL,4329,1.0,Oui
+XRAY,val,2,699,PNEUMONIA,510,NORMAL,189,2.698,Non
